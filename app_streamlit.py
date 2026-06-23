@@ -103,7 +103,7 @@ with col_map:
     
     # Vẽ đường nét đứt dự kiến
     if st.session_state.route_coords:
-        folium.Polyline(st.session_state.route_coords, color='#64748b', weight=3, dash_array='5').add_to(m)
+        folium.Polyline(st.session_state.route_coords, color='#64748b', weight=3).add_to(m)
     
     # Vẽ các dải màu lún (Xanh/Vàng/Đỏ) sau khi phân tích xong
     for poly in st.session_state.map_polylines:
