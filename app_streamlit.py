@@ -82,12 +82,10 @@ with st.container():
     with col_up2:
         st.write("**Chế độ chọn:**")
         pick_mode = st.radio("Thao tác bản đồ:", ["Xem bản đồ", "📍 Cắm Điểm Đầu", "📍 Cắm Điểm Cuối"], horizontal=True)
-        # ĐÃ SỬA: Cho phép nhập tay (disabled=False)
         start_str = st.text_input("Tọa độ Điểm Đầu (Lat, Lng):", f"{st.session_state.start_gps[0]:.5f}, {st.session_state.start_gps[1]:.5f}")
     
     with col_up3:
         st.write(f"**Chiều dài uốn lượn thực tế:** {st.session_state.route_distance:.1f} mét")
-        # ĐÃ SỬA: Cho phép nhập tay (disabled=False)
         end_str = st.text_input("Tọa độ Điểm Cuối (Lat, Lng):", f"{st.session_state.end_gps[0]:.5f}, {st.session_state.end_gps[1]:.5f}")
         analyze_btn = st.button("🚀 Bắt Đầu Truyền Luồng & Quét OpenCV", type="primary", use_container_width=True)
 
@@ -152,7 +150,7 @@ with col_main:
     if analyze_btn and uploaded_file:
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
-        st.session_state.video_path = video_path # Lưu lại đường dẫn video
+        st.session_state.video_path = video_path
         
         uploaded_file.seek(0)
         with open(video_path, "wb") as f: 
@@ -220,8 +218,6 @@ with col_main:
                         cv2.rectangle(frame_disp, (x, y), (x + w, y + h), (0, 165, 255), 2)
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                
-                # Chiếu video trực tiếp lúc quét
                 video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
                 
                 time.sleep(0.01)
@@ -246,29 +242,23 @@ with col_main:
 
                     seg_name = f"{current_segment*50}-{(current_segment+1)*50}m"
                     
-                    # ĐÃ SỬA: Lấy tọa độ không gian thật của phân đoạn 50m này
-                    seg_start_gps = "-"
-                    seg_end_gps = "-"
-                    if st.session_state.route_coords:
-                        sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
-                        if sub_c and len(sub_c) > 0:
-                            seg_start_gps = f"{sub_c[0][0]:.5f}, {sub_c[0][1]:.5f}"
-                            seg_end_gps = f"{sub_c[-1][0]:.5f}, {sub_c[-1][1]:.5f}"
-                            st.session_state.map_polylines.append({
-                                'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
-                            })
-
-                    # Cập nhật kết quả với cột tọa độ
+                    # Bảng dữ liệu đã quay về giống bảng cũ gọn gàng
                     st.session_state.analysis_results.append({
                         'Phân Đoạn': seg_name,
-                        'Tọa độ Đầu (Lat,Lng)': seg_start_gps,
-                        'Tọa độ Cuối (Lat,Lng)': seg_end_gps,
                         'Dài (m)': round(min(t_len, 50.0), 1),
                         'Rộng (m)': round(a_wid, 2),
                         'Diện tích lún (m²)': round(t_area, 2),
                         'Vị trí': pos_str,
                         'Mức độ': status
                     })
+
+                    # Vẫn giữ logic cắt tọa độ để hiển thị màu trên bản đồ
+                    if st.session_state.route_coords:
+                        sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
+                        if sub_c and len(sub_c) > 0:
+                            st.session_state.map_polylines.append({
+                                'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
+                            })
 
                     table_placeholder.dataframe(pd.DataFrame(st.session_state.analysis_results), use_container_width=True, hide_index=True)
                     
@@ -278,7 +268,7 @@ with col_main:
             cap.release()
             st.rerun() 
 
-    # --- ĐÃ SỬA: LUÔN HIỂN THỊ VIDEO KHI QUÉT XONG ---
+    # Hiển thị trình phát Video sau khi quét xong
     elif st.session_state.analysis_results and st.session_state.video_path:
         video_placeholder.video(st.session_state.video_path)
 
@@ -303,9 +293,11 @@ with col_main:
             sc3.metric("Chiều rộng TB", f"{rong_tb:.2f} m")
             sc4.metric("Diện tích lún TB", f"{dt_tb:.2f} m²")
 
-            # Đã có cột tọa độ, giờ tạo String CSV
+            # XUẤT CSV: Ghép tọa độ điểm đầu/cuối của toàn tuyến lên Header
             summary_text = f"Mã định danh đoạn đường: {vid_id}\n"
-            summary_text += f"THỐNG KÊ TOÀN TUYẾN: Tỷ lệ lún: {ty_le_xuat_hien:.1f}% | Dài TB: {dai_tb:.1f}m | Rộng TB: {rong_tb:.2f}m | Diện tích lún TB: {dt_tb:.2f}m²\n\n"
+            summary_text += f"Tọa độ Điểm Đầu: {st.session_state.start_gps[0]:.6f}, {st.session_state.start_gps[1]:.6f}\n"
+            summary_text += f"Tọa độ Điểm Cuối: {st.session_state.end_gps[0]:.6f}, {st.session_state.end_gps[1]:.6f}\n"
+            summary_text += f"THỐNG KÊ TỔNG QUAN: Tỷ lệ lún: {ty_le_xuat_hien:.1f}% | Dài TB: {dai_tb:.1f}m | Rộng TB: {rong_tb:.2f}m | Diện tích lún TB: {dt_tb:.2f}m²\n\n"
             
             csv_data = df.to_csv(index=False)
             final_csv = (summary_text + csv_data).encode('utf-8-sig')
