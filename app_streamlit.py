@@ -101,17 +101,14 @@ with col_map:
     folium.Marker(st.session_state.start_gps, popup="Điểm Đầu", icon=folium.Icon(color='green')).add_to(m)
     folium.Marker(st.session_state.end_gps, popup="Điểm Cuối", icon=folium.Icon(color='red')).add_to(m)
     
-    # ĐÃ SỬA LỖI Ở ĐÂY: Dùng PolyLine thay vì Polyline
     if st.session_state.route_coords:
         folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m)
     
-    # ĐÃ SỬA LỖI Ở ĐÂY: Dùng PolyLine thay vì Polyline
     for poly in st.session_state.map_polylines:
         folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9, popup=poly['popup']).add_to(m)
 
     map_data = st_folium(m, width="100%", height=600, key="map")
     
-    # Xử lý click bản đồ
     if map_data and map_data.get('last_clicked'):
         clicked = [map_data['last_clicked']['lat'], map_data['last_clicked']['lng']]
         if pick_mode == "📍 Cắm Điểm Đầu":
@@ -134,106 +131,120 @@ with col_main:
     if analyze_btn and uploaded_file:
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
-        with open(video_path, "wb") as f: f.write(uploaded_file.read())
+        
+        uploaded_file.seek(0)
+        with open(video_path, "wb") as f: 
+            f.write(uploaded_file.read())
         
         cap = cv2.VideoCapture(video_path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        speed_m_s = 15.0  
-        estimated_length_meters = (total_frames / fps) * speed_m_s
-        limit_distance = st.session_state.route_distance if st.session_state.route_distance > 0 else estimated_length_meters
-        frames_per_segment = int((50 / speed_m_s) * fps)
-
-        current_segment = 0
-        frame_count = 0
-        seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
-        st.session_state.analysis_results = []
-        st.session_state.map_polylines = []
-
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret: break
-
-            current_distance_m = int((frame_count / fps) * speed_m_s)
-            if current_distance_m > limit_distance: break
-
-            frame_disp = cv2.resize(frame, (640, 360))
-            height, width = frame_disp.shape[:2]
+        if not cap.isOpened():
+            st.error("❌ Hệ thống không thể đọc được video này! Vui lòng kiểm tra lại file định dạng MP4/AVI.")
+        else:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            if fps <= 0: fps = 30.0
             
-            mask = np.zeros((height, width), dtype=np.uint8)
-            road_polygon = np.array([
-                [int(width * 0.1), int(height * 0.5)],
-                [int(width * 0.9), int(height * 0.5)],
-                [int(width * 1.0), int(height * 1.0)],
-                [int(width * 0.0), int(height * 1.0)]
-            ], np.int32)
-            cv2.fillPoly(mask, [road_polygon], 255)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            speed_m_s = 15.0  
+            estimated_length_meters = (total_frames / fps) * speed_m_s
+            
+            limit_distance = st.session_state.route_distance if st.session_state.route_distance > 0 else estimated_length_meters
+            if limit_distance <= 0: limit_distance = 1000.0
+            
+            frames_per_segment = int((50 / speed_m_s) * fps)
+            if frames_per_segment <= 0: frames_per_segment = 100
 
-            roi_gray = cv2.bitwise_and(cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), mask=mask)
-            contours, _ = cv2.findContours(cv2.Canny(cv2.GaussianBlur(roi_gray, (7, 7), 0), 100, 200), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            current_segment = 0
+            frame_count = 0
+            seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
+            st.session_state.analysis_results = []
+            st.session_state.map_polylines = []
 
-            for cnt in contours:
-                if cv2.contourArea(cnt) > 1500:  
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    L = h * 0.05  
-                    W = w * 0.02  
-                    A = L * W     
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret: break
+
+                current_distance_m = int((frame_count / fps) * speed_m_s)
+                if current_distance_m > limit_distance: break
+
+                frame_disp = cv2.resize(frame, (640, 360))
+                height, width = frame_disp.shape[:2]
+                
+                mask = np.zeros((height, width), dtype=np.uint8)
+                road_polygon = np.array([
+                    [int(width * 0.1), int(height * 0.5)],
+                    [int(width * 0.9), int(height * 0.5)],
+                    [int(width * 1.0), int(height * 1.0)],
+                    [int(width * 0.0), int(height * 1.0)]
+                ], np.int32)
+                cv2.fillPoly(mask, [road_polygon], 255)
+
+                roi_gray = cv2.bitwise_and(cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), mask=mask)
+                contours, _ = cv2.findContours(cv2.Canny(cv2.GaussianBlur(roi_gray, (7, 7), 0), 100, 200), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                for cnt in contours:
+                    if cv2.contourArea(cnt) > 1500:  
+                        x, y, w, h = cv2.boundingRect(cnt)
+                        L = h * 0.05  
+                        W = w * 0.02  
+                        A = L * W     
+                        
+                        center_x = x + (w / 2)
+                        if center_x < width / 3: pos = "Trái"
+                        elif center_x < 2 * (width / 3): pos = "Giữa"
+                        else: pos = "Phải"
+
+                        seg_len.append(L); seg_wid.append(W); seg_area.append(A); seg_pos.append(pos)
+                        cv2.rectangle(frame_disp, (x, y), (x + w, y + h), (0, 165, 255), 2)
+
+                cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
+                
+                time.sleep(0.02)
+                frame_count += 1
+
+                if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
+                    t_len = sum(seg_len)
+                    a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
+                    t_area = sum(seg_area)
                     
-                    center_x = x + (w / 2)
-                    if center_x < width / 3: pos = "Trái"
-                    elif center_x < 2 * (width / 3): pos = "Giữa"
-                    else: pos = "Phải"
+                    unique_positions = list(set(seg_pos))
+                    pos_str = ", ".join(unique_positions) if unique_positions else "-"
+                    
+                    status = "Tốt"
+                    map_color = '#10b981'
+                    if t_area > 15.0: 
+                        status, map_color = "Nặng", '#ef4444'
+                    elif t_area > 5.0: 
+                        status, map_color = "Trung bình", '#f97316'
+                    elif t_area > 0: 
+                        status, map_color = "Nhẹ", '#eab308'
 
-                    seg_len.append(L); seg_wid.append(W); seg_area.append(A); seg_pos.append(pos)
-                    cv2.rectangle(frame_disp, (x, y), (x + w, y + h), (0, 165, 255), 2)
+                    seg_name = f"{current_segment*50}-{(current_segment+1)*50}m"
+                    st.session_state.analysis_results.append({
+                        'Phân Đoạn': seg_name,
+                        'Dài (m)': round(min(t_len, 50.0), 1),
+                        'Rộng (m)': round(a_wid, 2),
+                        'Diện tích lún (m²)': round(t_area, 2),
+                        'Vị trí': pos_str,
+                        'Mức độ': status
+                    })
 
-            cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
-            frame_count += 1
+                    if st.session_state.route_coords:
+                        sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
+                        if sub_c:
+                            st.session_state.map_polylines.append({
+                                'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
+                            })
 
-            if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
-                t_len = sum(seg_len)
-                a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
-                t_area = sum(seg_area)
-                
-                unique_positions = list(set(seg_pos))
-                pos_str = ", ".join(unique_positions) if unique_positions else "-"
-                
-                status = "Tốt"
-                map_color = '#10b981'
-                if t_area > 15.0: 
-                    status, map_color = "Nặng", '#ef4444'
-                elif t_area > 5.0: 
-                    status, map_color = "Trung bình", '#f97316'
-                elif t_area > 0: 
-                    status, map_color = "Nhẹ", '#eab308'
+                    table_placeholder.dataframe(pd.DataFrame(st.session_state.analysis_results), use_container_width=True, hide_index=True)
+                    
+                    current_segment += 1
+                    seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
 
-                seg_name = f"{current_segment*50}-{(current_segment+1)*50}m"
-                st.session_state.analysis_results.append({
-                    'Phân Đoạn': seg_name,
-                    'Dài (m)': round(min(t_len, 50.0), 1),
-                    'Rộng (m)': round(a_wid, 2),
-                    'Diện tích lún (m²)': round(t_area, 2),
-                    'Vị trí': pos_str,
-                    'Mức độ': status
-                })
-
-                if st.session_state.route_coords:
-                    sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
-                    if sub_c:
-                        st.session_state.map_polylines.append({
-                            'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
-                        })
-
-                table_placeholder.dataframe(pd.DataFrame(st.session_state.analysis_results), use_container_width=True, hide_index=True)
-                
-                current_segment += 1
-                seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
-
-        cap.release()
-        st.success("🎉 Đã quét xong video!")
-        st.rerun() 
+            cap.release()
+            st.success("🎉 Đã quét xong video!")
+            st.rerun() 
 
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
@@ -256,5 +267,12 @@ with col_main:
             sc3.metric("Chiều rộng TB", f"{rong_tb:.2f} m")
             sc4.metric("Diện tích lún TB", f"{dt_tb:.2f} m²")
 
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="📥 Xuất File Báo Cáo Excel (CSV)", data=csv, file_name=f"Bao_Cao_{vid_id}.csv", mime="text/csv")
+            # --- CẬP NHẬT: THÊM THỐNG KÊ VÀO FILE CSV KHI XUẤT ---
+            summary_text = f"Mã định danh đoạn đường: {vid_id}\n"
+            summary_text += f"THỐNG KÊ TOÀN TUYẾN: Tỷ lệ lún: {ty_le_xuat_hien:.1f}% | Dài TB: {dai_tb:.1f}m | Rộng TB: {rong_tb:.2f}m | Diện tích lún TB: {dt_tb:.2f}m²\n\n"
+            
+            # Gộp phần Thống kê và phần Bảng dữ liệu (Dataframe)
+            csv_data = df.to_csv(index=False)
+            final_csv = (summary_text + csv_data).encode('utf-8-sig')
+
+            st.download_button(label="📥 Xuất File Báo Cáo Excel (CSV)", data=final_csv, file_name=f"Bao_Cao_{vid_id}.csv", mime="text/csv")
