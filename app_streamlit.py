@@ -101,13 +101,13 @@ with col_map:
     folium.Marker(st.session_state.start_gps, popup="Điểm Đầu", icon=folium.Icon(color='green')).add_to(m)
     folium.Marker(st.session_state.end_gps, popup="Điểm Cuối", icon=folium.Icon(color='red')).add_to(m)
     
-    # Vẽ đường nét đứt dự kiến
+    # ĐÃ SỬA LỖI Ở ĐÂY: Dùng PolyLine thay vì Polyline
     if st.session_state.route_coords:
-        folium.Polyline(st.session_state.route_coords, color='#64748b', weight=3).add_to(m)
+        folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m)
     
-    # Vẽ các dải màu lún (Xanh/Vàng/Đỏ) sau khi phân tích xong
+    # ĐÃ SỬA LỖI Ở ĐÂY: Dùng PolyLine thay vì Polyline
     for poly in st.session_state.map_polylines:
-        folium.Polyline(poly['coords'], color=poly['color'], weight=6, opacity=0.9, popup=poly['popup']).add_to(m)
+        folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9, popup=poly['popup']).add_to(m)
 
     map_data = st_folium(m, width="100%", height=600, key="map")
     
@@ -161,7 +161,6 @@ with col_main:
             frame_disp = cv2.resize(frame, (640, 360))
             height, width = frame_disp.shape[:2]
             
-            # GIỮ NGUYÊN LOGIC OPENCV GỐC
             mask = np.zeros((height, width), dtype=np.uint8)
             road_polygon = np.array([
                 [int(width * 0.1), int(height * 0.5)],
@@ -193,7 +192,6 @@ with col_main:
             video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
             frame_count += 1
 
-            # TỔNG HỢP VÀ TÍNH TOÁN THEO YÊU CẦU 50M
             if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
                 t_len = sum(seg_len)
                 a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
@@ -221,7 +219,6 @@ with col_main:
                     'Mức độ': status
                 })
 
-                # Cắt đoạn đường trên bản đồ OSRM
                 if st.session_state.route_coords:
                     sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
                     if sub_c:
@@ -229,7 +226,6 @@ with col_main:
                             'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                         })
 
-                # Render Dataframe Live
                 table_placeholder.dataframe(pd.DataFrame(st.session_state.analysis_results), use_container_width=True, hide_index=True)
                 
                 current_segment += 1
@@ -237,15 +233,13 @@ with col_main:
 
         cap.release()
         st.success("🎉 Đã quét xong video!")
-        st.rerun() # Refresh lại để vẽ dải màu phân đoạn lên bản đồ
+        st.rerun() 
 
-    # Hiển thị TÓM TẮT THỐNG KÊ (Khi có dữ liệu hoặc đã chạy xong)
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
         table_placeholder.dataframe(df, use_container_width=True, hide_index=True)
         
-        # TÍNH TOÁN CÁC THÔNG SỐ TỔNG QUAN THEO YÊU CẦU:
-        df_rut = df[df['Diện tích lún (m²)'] > 0] # Lọc các đoạn bị hỏng
+        df_rut = df[df['Diện tích lún (m²)'] > 0] 
         tong_so_doan = len(df)
         so_doan_hong = len(df_rut)
         
@@ -262,6 +256,5 @@ with col_main:
             sc3.metric("Chiều rộng TB", f"{rong_tb:.2f} m")
             sc4.metric("Diện tích lún TB", f"{dt_tb:.2f} m²")
 
-            # Nút xuất file Excel
             csv = df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(label="📥 Xuất File Báo Cáo Excel (CSV)", data=csv, file_name=f"Bao_Cao_{vid_id}.csv", mime="text/csv")
