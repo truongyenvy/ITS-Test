@@ -228,17 +228,17 @@ with col_main:
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 
-                # --- PHẦN SỬA ĐỔI QUAN TRỌNG CHO VIDEO ---
-                # Chuyển đổi màu từ BGR của OpenCV sang RGB chuẩn của Streamlit
-                frame_rgb = cv2.cvtColor(frame_disp, cv2.COLOR_BGR2RGB)
-                video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+                # --- SỬA LẠI ĐOẠN NÀY ĐỂ VIDEO CHẠY ĐƯỢC TRÊN WEB ---
+                # Thay vì cập nhật mọi frame gây nghẽn mạng, ta chỉ cập nhật UI mỗi 3-5 frame
+                if frame_count % 3 == 0: 
+                    frame_rgb = cv2.cvtColor(frame_disp, cv2.COLOR_BGR2RGB)
+                    video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
                 
-                # Căn thời gian sleep bằng chuẩn FPS của video để không bị chớp hay giật
-                time.sleep(1 / fps)
-                # ----------------------------------------
+                # BỎ HẲN time.sleep() ĐI VÌ TRÊN SERVER XỬ LÝ KHÔNG CẦN DELAY
+                # time.sleep(1 / fps) 
+                # ---------------------------------------------------
                 
                 frame_count += 1
-
                 if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
                     t_len = sum(seg_len)
                     a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
