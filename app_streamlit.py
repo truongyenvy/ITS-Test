@@ -151,18 +151,16 @@ with col_map:
 with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ HIỂN THỊ</h4>", unsafe_allow_html=True)
     
-    # CHIA CỘT NGANG CHO 2 VIDEO
     vid_col1, vid_col2 = st.columns(2)
     
     with vid_col1:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc (Tự động chạy)</p>", unsafe_allow_html=True)
         org_vid_placeholder = st.empty()
         
     with vid_col2:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video OpenCV</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video Quét OpenCV</p>", unsafe_allow_html=True)
         video_placeholder = st.empty()
 
-    # THÊM AUTOPLAY VÀ MUTED ĐỂ VIDEO TỰ CHẠY MÀ KHÔNG CẦN BẤM NÚT
     if st.session_state.video_path and os.path.exists(st.session_state.video_path):
         org_vid_placeholder.video(st.session_state.video_path, autoplay=True, muted=True)
     
@@ -183,7 +181,6 @@ with col_main:
         with open(video_path, "wb") as f: 
             f.write(uploaded_file.read())
             
-        # ĐẶT LẠI TRÌNH PHÁT VỚI AUTOPLAY
         org_vid_placeholder.video(video_path, autoplay=True, muted=True)
         
         cap = cv2.VideoCapture(video_path)
@@ -194,10 +191,9 @@ with col_main:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             if fps <= 0: fps = 30.0
             
-            orig_w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            orig_h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            # --- ĐÃ ÉP CỨNG TỶ LỆ KHUNG HÌNH NGANG CHO OPENCV ---
             target_w = 480
-            target_h = int(target_w * (orig_h / orig_w)) if orig_w > 0 else 270
+            target_h = 270 
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             speed_m_s = 15.0  
@@ -295,9 +291,10 @@ with col_main:
                                 'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                             })
 
-                    # TÔ MÀU BẢNG NGAY TRONG LÚC QUÉT
+                    # --- ĐÃ ÉP ĐỊNH DẠNG SỐ KHÔNG CÒN 0000 ---
                     df = pd.DataFrame(st.session_state.analysis_results)
-                    styled_df = df.style.map(highlight_status, subset=['Mức độ'])
+                    format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
+                    styled_df = df.style.format(format_dict).map(highlight_status, subset=['Mức độ'])
                     table_placeholder.dataframe(styled_df, use_container_width=True, hide_index=True)
                     
                     current_segment += 1
@@ -306,10 +303,11 @@ with col_main:
             cap.release()
             st.rerun() 
 
-    # HIỂN THỊ VÀ TÔ MÀU BẢNG SAU KHI QUÉT XONG
+    # HIỂN THỊ VÀ TÔ MÀU BẢNG SAU KHI QUÉT XONG (ĐÃ KHÓA FORMAT SỐ)
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
-        styled_df = df.style.map(highlight_status, subset=['Mức độ'])
+        format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
+        styled_df = df.style.format(format_dict).map(highlight_status, subset=['Mức độ'])
         table_placeholder.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         df_rut = df[df['Diện tích lún (m²)'] > 0] 
