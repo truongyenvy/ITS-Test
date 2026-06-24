@@ -11,15 +11,17 @@ import math
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Phân Tích Lún Vệt Bánh Xe - Nhóm 10", layout="wide")
 
-# --- CSS CUSTOM TÙY CHỈNH GIAO DIỆN CÂN BẰNG VIDEO ---
+# --- CSS CUSTOM TÙY CHỈNH GIAO DIỆN (ĐÃ THÊM ĐỂ CÂN BẰNG 2 VIDEO) ---
 st.markdown("""
 <style>
+    /* Ép chiều cao video gốc bằng đúng chiều cao video OpenCV (270px) */
     video {
         max-height: 270px !important;
         object-fit: contain !important;
         border-radius: 8px;
-        background-color: #0f172a;
+        background-color: #0f172a; /* Nền tối cho viền video dọc */
     }
+    /* Bo góc cho video OpenCV cho đồng bộ */
     [data-testid="stImage"] img {
         border-radius: 8px;
     }
@@ -36,7 +38,7 @@ if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
 if 'video_path' not in st.session_state: st.session_state.video_path = None
 if 'last_frame' not in st.session_state: st.session_state.last_frame = None
 
-# --- HÀM BỔ TRỢ HÌNH HỌC & OSRM ---
+# --- HÀM BỔ TRỢ ---
 def tinh_khoang_cach(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -80,6 +82,7 @@ def cat_doan_duong_cong(coords, start_m, end_m):
         if accumulated > end_m: break
     return sub_seg
 
+# Hàm tô màu cho Pandas Dataframe
 def highlight_status(val):
     if val == 'Nặng': return 'color: #ef4444; font-weight: bold;'
     elif val == 'Trung bình': return 'color: #f97316; font-weight: bold;'
@@ -111,7 +114,7 @@ with st.container():
         end_str = st.text_input("Tọa độ Điểm Cuối (Lat, Lng):", f"{st.session_state.end_gps[0]:.5f}, {st.session_state.end_gps[1]:.5f}")
         analyze_btn = st.button("🚀 Bắt Đầu Truyền Luồng & Quét OpenCV", type="primary", use_container_width=True)
 
-# Lắng nghe nhập tay tọa độ
+# Lắng nghe sự kiện điền tay tọa độ
 try:
     s_lat, s_lng = map(float, start_str.split(','))
     if [s_lat, s_lng] != st.session_state.start_gps:
@@ -131,52 +134,53 @@ except: pass
 if not st.session_state.route_coords and st.session_state.start_gps and st.session_state.end_gps:
     st.session_state.route_coords, st.session_state.route_distance = lay_duong_cong_osrm(st.session_state.start_gps, st.session_state.end_gps)
 
-# --- CHIA ĐÔI BỐ CỤC CHÍNH ---
+# --- CHIA ĐÔI BỐ CỤC LÀM VIỆC CHÍNH ---
 col_map, col_main = st.columns([4.5, 5.5], gap="medium")
 
-# CỘT TRÁI: BẢN ĐỒ (ĐÃ CẤU HÌNH KHUNG CHỨA ĐỘNG MAP_PLACEHOLDER)
+# CỘT TRÁI: BẢN ĐỒ
 with col_map:
     st.markdown("<h4 style='color: #1e3a8a;'>🗺️ BẢN ĐỒ GIÁM SÁT TRỰC TUYẾN</h4>", unsafe_allow_html=True)
-    map_placeholder = st.empty() 
+    
+    m = folium.Map(location=st.session_state.start_gps, zoom_start=14)
+    folium.Marker(st.session_state.start_gps, popup="Điểm Đầu", icon=folium.Icon(color='green')).add_to(m)
+    folium.Marker(st.session_state.end_gps, popup="Điểm Cuối", icon=folium.Icon(color='red')).add_to(m)
+    
+    if st.session_state.route_coords:
+        folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m)
+    
+    for poly in st.session_state.map_polylines:
+        folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9, popup=poly['popup']).add_to(m)
 
-    # Vẽ bản đồ mặc định ban đầu khi chưa quét video
-    if not (analyze_btn and uploaded_file):
-        m_init = folium.Map(location=st.session_state.start_gps, zoom_start=14)
-        folium.Marker(st.session_state.start_gps, popup="Điểm Đầu", icon=folium.Icon(color='green')).add_to(m_init)
-        folium.Marker(st.session_state.end_gps, popup="Điểm Cuối", icon=folium.Icon(color='red')).add_to(m_init)
-        if st.session_state.route_coords:
-            folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m_init)
-        for poly in st.session_state.map_polylines:
-            folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9, popup=poly['popup']).add_to(m_init)
-        
-        with map_placeholder:
-            map_data = st_folium(m_init, width="100%", height=400, key="map_static")
-            
-            if map_data and map_data.get('last_clicked'):
-                clicked = [map_data['last_clicked']['lat'], map_data['last_clicked']['lng']]
-                if pick_mode == "📍 Cắm Điểm Đầu":
-                    st.session_state.start_gps = clicked
-                    st.session_state.route_coords, st.session_state.route_distance = lay_duong_cong_osrm(st.session_state.start_gps, st.session_state.end_gps)
-                    st.rerun()
-                elif pick_mode == "📍 Cắm Điểm Cuối":
-                    st.session_state.end_gps = clicked
-                    st.session_state.route_coords, st.session_state.route_distance = lay_duong_cong_osrm(st.session_state.start_gps, st.session_state.end_gps)
-                    st.rerun()
+    map_data = st_folium(m, width="100%", height=400, key="map")
+    
+    if map_data and map_data.get('last_clicked'):
+        clicked = [map_data['last_clicked']['lat'], map_data['last_clicked']['lng']]
+        if pick_mode == "📍 Cắm Điểm Đầu":
+            st.session_state.start_gps = clicked
+            st.session_state.route_coords, st.session_state.route_distance = lay_duong_cong_osrm(st.session_state.start_gps, st.session_state.end_gps)
+            st.rerun()
+        elif pick_mode == "📍 Cắm Điểm Cuối":
+            st.session_state.end_gps = clicked
+            st.session_state.route_coords, st.session_state.route_distance = lay_duong_cong_osrm(st.session_state.start_gps, st.session_state.end_gps)
+            st.rerun()
 
-# CỘT PHẢI: XỬ LÝ VIDEO VÀ THỐNG KÊ LIVE
+# CỘT PHẢI: VIDEO VÀ THỐNG KÊ
 with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ HIỂN THỊ</h4>", unsafe_allow_html=True)
     
     vid_col1, vid_col2 = st.columns(2)
+    
     with vid_col1:
         st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc</p>", unsafe_allow_html=True)
         org_vid_placeholder = st.empty()
+        
     with vid_col2:
         st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video OpenCV</p>", unsafe_allow_html=True)
         video_placeholder = st.empty()
 
     if st.session_state.video_path and os.path.exists(st.session_state.video_path):
         org_vid_placeholder.video(st.session_state.video_path, autoplay=True, muted=True)
+    
     if st.session_state.last_frame is not None:
         video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
         
@@ -191,22 +195,29 @@ with col_main:
         st.session_state.video_path = video_path
         
         uploaded_file.seek(0)
-        with open(video_path, "wb") as f: f.write(uploaded_file.read())
+        with open(video_path, "wb") as f: 
+            f.write(uploaded_file.read())
             
         org_vid_placeholder.video(video_path, autoplay=True, muted=True)
+        
         cap = cv2.VideoCapture(video_path)
         
         if not cap.isOpened():
-            st.error("❌ Không thể đọc video.")
+            st.error("❌ Hệ thống không thể đọc được video này! Vui lòng kiểm tra lại file định dạng MP4/AVI.")
         else:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-            target_w, target_h = 480, 270 
+            if fps <= 0: fps = 30.0
+            
+            target_w = 480
+            target_h = 270 
+            
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             speed_m_s = 15.0  
             estimated_length_meters = (total_frames / fps) * speed_m_s
             
             limit_distance = st.session_state.route_distance if st.session_state.route_distance > 0 else estimated_length_meters
             if limit_distance <= 0: limit_distance = 1000.0
+            
             frames_per_segment = int((50 / speed_m_s) * fps)
             if frames_per_segment <= 0: frames_per_segment = 100
 
@@ -227,8 +238,12 @@ with col_main:
                 height, width = frame_disp.shape[:2]
                 
                 mask = np.zeros((height, width), dtype=np.uint8)
-                road_polygon = np.array([[int(width*0.1), int(height*0.5)], [int(width*0.9), int(height*0.5)],
-                                        [int(width*1.0), int(height*1.0)], [int(width*0.0), int(height*1.0)]], np.int32)
+                road_polygon = np.array([
+                    [int(width * 0.1), int(height * 0.5)],
+                    [int(width * 0.9), int(height * 0.5)],
+                    [int(width * 1.0), int(height * 1.0)],
+                    [int(width * 0.0), int(height * 1.0)]
+                ], np.int32)
                 cv2.fillPoly(mask, [road_polygon], 255)
 
                 roi_gray = cv2.bitwise_and(cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), mask=mask)
@@ -237,8 +252,15 @@ with col_main:
                 for cnt in contours:
                     if cv2.contourArea(cnt) > 800:  
                         x, y, w, h = cv2.boundingRect(cnt)
-                        L, W, A = h * 0.05, w * 0.02, (h * 0.05) * (w * 0.02)
-                        pos = "Trái" if (x + w/2) < width/3 else ("Phải" if (x + w/2) > 2*width/3 else "Giữa")
+                        L = h * 0.05  
+                        W = w * 0.02  
+                        A = L * W     
+                        
+                        center_x = x + (w / 2)
+                        if center_x < width / 3: pos = "Trái"
+                        elif center_x < 2 * (width / 3): pos = "Giữa"
+                        else: pos = "Phải"
+
                         seg_len.append(L); seg_wid.append(W); seg_area.append(A); seg_pos.append(pos)
                         cv2.rectangle(frame_disp, (x, y), (x + w, y + h), (0, 165, 255), 2)
 
@@ -254,20 +276,28 @@ with col_main:
                     t_len = sum(seg_len)
                     a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
                     t_area = sum(seg_area)
-                    pos_str = ", ".join(list(set(seg_pos))) if seg_pos else "-"
+                    
+                    unique_positions = list(set(seg_pos))
+                    pos_str = ", ".join(unique_positions) if unique_positions else "-"
                     
                     status = "Tốt"
                     map_color = '#10b981'
-                    if t_area > 15.0: status, map_color = "Nặng", '#ef4444'
-                    elif t_area > 5.0: status, map_color = "Trung bình", '#f97316'
-                    elif t_area > 0: status, map_color = "Nhẹ", '#eab308'
+                    if t_area > 15.0: 
+                        status, map_color = "Nặng", '#ef4444'
+                    elif t_area > 5.0: 
+                        status, map_color = "Trung bình", '#f97316'
+                    elif t_area > 0: 
+                        status, map_color = "Nhẹ", '#eab308'
 
                     seg_name = f"{current_segment*50}-{(current_segment+1)*50}m"
                     
                     st.session_state.analysis_results.append({
-                        'Phân Đoạn': seg_name, 'Dài (m)': round(min(t_len, 50.0), 1),
-                        'Rộng (m)': round(a_wid, 2), 'Diện tích lún (m²)': round(t_area, 2),
-                        'Vị trí': pos_str, 'Mức độ': status
+                        'Phân Đoạn': seg_name,
+                        'Dài (m)': round(min(t_len, 50.0), 1),
+                        'Rộng (m)': round(a_wid, 2),
+                        'Diện tích lún (m²)': round(t_area, 2),
+                        'Vị trí': pos_str,
+                        'Mức độ': status
                     })
 
                     if st.session_state.route_coords:
@@ -276,17 +306,6 @@ with col_main:
                             st.session_state.map_polylines.append({
                                 'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                             })
-                            
-                    # --- ĐÃ SỬA LỖI NAME ERROR Ở ĐÂY ---
-                    m_live = folium.Map(location=st.session_state.start_gps, zoom_start=14)
-                    folium.Marker(st.session_state.start_gps, icon=folium.Icon(color='green')).add_to(m_live)
-                    folium.Marker(st.session_state.end_gps, icon=folium.Icon(color='red')).add_to(m_live)
-                    if st.session_state.route_coords:
-                        folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m_live)
-                    for poly in st.session_state.map_polylines:
-                        folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9).add_to(m_live)
-                    
-                    map_placeholder.st_folium(m_live, width="100%", height=400, key=f"map_live_{current_segment}")
 
                     df = pd.DataFrame(st.session_state.analysis_results)
                     format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
@@ -299,6 +318,7 @@ with col_main:
             cap.release()
             st.rerun() 
 
+    # HIỂN THỊ VÀ TÔ MÀU BẢNG SAU KHI QUÉT XONG (ĐÃ KHÓA FORMAT SỐ)
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
         format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
@@ -329,4 +349,5 @@ with col_main:
             
             csv_data = df.to_csv(index=False)
             final_csv = (summary_text + csv_data).encode('utf-8-sig')
+
             st.download_button(label="📥 Xuất File Báo Cáo Excel (CSV)", data=final_csv, file_name=f"Bao_Cao_{vid_id}.csv", mime="text/csv")
