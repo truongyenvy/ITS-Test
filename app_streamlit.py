@@ -11,6 +11,23 @@ import math
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Phân Tích Lún Vệt Bánh Xe - Nhóm 10", layout="wide")
 
+# --- CSS CUSTOM TÙY CHỈNH GIAO DIỆN (ĐÃ THÊM ĐỂ CÂN BẰNG 2 VIDEO) ---
+st.markdown("""
+<style>
+    /* Ép chiều cao video gốc bằng đúng chiều cao video OpenCV (270px) */
+    video {
+        max-height: 270px !important;
+        object-fit: contain !important;
+        border-radius: 8px;
+        background-color: #0f172a; /* Nền tối cho viền video dọc */
+    }
+    /* Bo góc cho video OpenCV cho đồng bộ */
+    [data-testid="stImage"] img {
+        border-radius: 8px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- KHỞI TẠO BIẾN TOÀN CỤC (SESSION STATE) ---
 if 'start_gps' not in st.session_state: st.session_state.start_gps = [21.0055, 105.9334]
 if 'end_gps' not in st.session_state: st.session_state.end_gps = [21.0125, 105.9385]
@@ -154,11 +171,11 @@ with col_main:
     vid_col1, vid_col2 = st.columns(2)
     
     with vid_col1:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc (Tự động chạy)</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc</p>", unsafe_allow_html=True)
         org_vid_placeholder = st.empty()
         
     with vid_col2:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video Quét OpenCV</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video OpenCV</p>", unsafe_allow_html=True)
         video_placeholder = st.empty()
 
     if st.session_state.video_path and os.path.exists(st.session_state.video_path):
@@ -191,7 +208,6 @@ with col_main:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             if fps <= 0: fps = 30.0
             
-            # --- ĐÃ ÉP CỨNG TỶ LỆ KHUNG HÌNH NGANG CHO OPENCV ---
             target_w = 480
             target_h = 270 
             
@@ -291,7 +307,6 @@ with col_main:
                                 'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                             })
 
-                    # --- ĐÃ ÉP ĐỊNH DẠNG SỐ KHÔNG CÒN 0000 ---
                     df = pd.DataFrame(st.session_state.analysis_results)
                     format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
                     styled_df = df.style.format(format_dict).map(highlight_status, subset=['Mức độ'])
