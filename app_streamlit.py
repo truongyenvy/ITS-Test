@@ -137,7 +137,7 @@ col_map, col_main = st.columns([4.5, 5.5], gap="medium")
 # CỘT TRÁI: BẢN ĐỒ (ĐÃ CẤU HÌNH KHUNG CHỨA ĐỘNG MAP_PLACEHOLDER)
 with col_map:
     st.markdown("<h4 style='color: #1e3a8a;'>🗺️ BẢN ĐỒ GIÁM SÁT TRỰC TUYẾN</h4>", unsafe_allow_html=True)
-    map_placeholder = st.empty() # Khung động phục vụ cập nhật map live từng 50m
+    map_placeholder = st.empty() 
 
     # Vẽ bản đồ mặc định ban đầu khi chưa quét video
     if not (analyze_btn and uploaded_file):
@@ -250,7 +250,6 @@ with col_main:
                 
                 frame_count += 1
 
-                # CHẠY ĐỦ 50M -> CẬP NHẬT LIVE CẢ BẢNG VÀ BẢN ĐỒ
                 if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
                     t_len = sum(seg_len)
                     a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
@@ -271,7 +270,6 @@ with col_main:
                         'Vị trí': pos_str, 'Mức độ': status
                     })
 
-                    # Thuật toán cắt tọa độ bám đường cong thực tế
                     if st.session_state.route_coords:
                         sub_c = cat_doan_duong_cong(st.session_state.route_coords, current_segment*50, (current_segment+1)*50)
                         if sub_c and len(sub_c) > 0:
@@ -279,19 +277,17 @@ with col_main:
                                 'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                             })
                             
-                    # --- ĐÃ CẬP NHẬT: Vẽ trực tiếp đoạn màu 50m lên bản đồ ngay khi vừa quét xong ---
+                    # --- ĐÃ SỬA LỖI NAME ERROR Ở ĐÂY ---
                     m_live = folium.Map(location=st.session_state.start_gps, zoom_start=14)
-                    folium.Marker(st.session_state.start_gps, icon=folium.Icon(color='green')).add_to(m)
-                    folium.Marker(st.session_state.end_gps, icon=folium.Icon(color='red')).add_to(m)
+                    folium.Marker(st.session_state.start_gps, icon=folium.Icon(color='green')).add_to(m_live)
+                    folium.Marker(st.session_state.end_gps, icon=folium.Icon(color='red')).add_to(m_live)
                     if st.session_state.route_coords:
                         folium.PolyLine(st.session_state.route_coords, color='#64748b', weight=3).add_to(m_live)
                     for poly in st.session_state.map_polylines:
                         folium.PolyLine(poly['coords'], color=poly['color'], weight=6, opacity=0.9).add_to(m_live)
                     
-                    # Đẩy bản đồ mới cập nhật vào khung chứa động
                     map_placeholder.st_folium(m_live, width="100%", height=400, key=f"map_live_{current_segment}")
 
-                    # Hiển thị và tô màu bảng số liệu
                     df = pd.DataFrame(st.session_state.analysis_results)
                     format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
                     styled_df = df.style.format(format_dict).map(highlight_status, subset=['Mức độ'])
@@ -303,7 +299,6 @@ with col_main:
             cap.release()
             st.rerun() 
 
-    # ĐỒNG BỘ HIỂN THỊ KHI DỪNG CHƯƠNG TRÌNH
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
         format_dict = {'Dài (m)': '{:.1f}', 'Rộng (m)': '{:.2f}', 'Diện tích lún (m²)': '{:.2f}'}
