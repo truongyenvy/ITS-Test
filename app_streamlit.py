@@ -21,7 +21,7 @@ if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
 if 'video_path' not in st.session_state: st.session_state.video_path = None
 if 'last_frame' not in st.session_state: st.session_state.last_frame = None
 
-# --- HÀM BỔ TRỢ TOÁN HỌC & BẢN ĐỒ ---
+# --- HÀM BỔ TRỢ ---
 def tinh_khoang_cach(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -64,6 +64,14 @@ def cat_doan_duong_cong(coords, start_m, end_m):
         accumulated = next_dist
         if accumulated > end_m: break
     return sub_seg
+
+# Hàm tô màu cho Pandas Dataframe
+def highlight_status(val):
+    if val == 'Nặng': return 'color: #ef4444; font-weight: bold;'
+    elif val == 'Trung bình': return 'color: #f97316; font-weight: bold;'
+    elif val == 'Nhẹ': return 'color: #eab308; font-weight: bold;'
+    elif val == 'Tốt': return 'color: #10b981; font-weight: bold;'
+    return ''
 
 # --- GIAO DIỆN HEADER ---
 st.markdown("<h2 style='text-align: center; color: #b91c1c;'>Hệ Thống Phân Tích Độ Lún Đường Nhựa Qua Video</h2>", unsafe_allow_html=True)
@@ -143,18 +151,20 @@ with col_map:
 with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ HIỂN THỊ</h4>", unsafe_allow_html=True)
     
+    # CHIA CỘT NGANG CHO 2 VIDEO
     vid_col1, vid_col2 = st.columns(2)
     
     with vid_col1:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc (Mượt)</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc</p>", unsafe_allow_html=True)
         org_vid_placeholder = st.empty()
         
     with vid_col2:
-        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video Quét OpenCV</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video OpenCV</p>", unsafe_allow_html=True)
         video_placeholder = st.empty()
 
+    # THÊM AUTOPLAY VÀ MUTED ĐỂ VIDEO TỰ CHẠY MÀ KHÔNG CẦN BẤM NÚT
     if st.session_state.video_path and os.path.exists(st.session_state.video_path):
-        org_vid_placeholder.video(st.session_state.video_path)
+        org_vid_placeholder.video(st.session_state.video_path, autoplay=True, muted=True)
     
     if st.session_state.last_frame is not None:
         video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
@@ -173,7 +183,8 @@ with col_main:
         with open(video_path, "wb") as f: 
             f.write(uploaded_file.read())
             
-        org_vid_placeholder.video(video_path)
+        # ĐẶT LẠI TRÌNH PHÁT VỚI AUTOPLAY
+        org_vid_placeholder.video(video_path, autoplay=True, muted=True)
         
         cap = cv2.VideoCapture(video_path)
         
@@ -183,11 +194,9 @@ with col_main:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             if fps <= 0: fps = 30.0
             
-            # --- ĐÃ THÊM: Tính toán tỷ lệ khung hình tự động ---
             orig_w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
             orig_h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
             target_w = 480
-            # Tự động điều chỉnh chiều cao để khớp tỷ lệ với video gốc
             target_h = int(target_w * (orig_h / orig_w)) if orig_w > 0 else 270
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -213,7 +222,6 @@ with col_main:
                 current_distance_m = int((frame_count / fps) * speed_m_s)
                 if current_distance_m > limit_distance: break
 
-                # --- ĐÃ SỬA: Resize theo tỷ lệ tự động đã tính toán ---
                 frame_disp = cv2.resize(frame, (target_w, target_h))
                 height, width = frame_disp.shape[:2]
                 
@@ -287,7 +295,10 @@ with col_main:
                                 'coords': sub_c, 'color': map_color, 'popup': f"Đoạn {seg_name}: {status}"
                             })
 
-                    table_placeholder.dataframe(pd.DataFrame(st.session_state.analysis_results), use_container_width=True, hide_index=True)
+                    # TÔ MÀU BẢNG NGAY TRONG LÚC QUÉT
+                    df = pd.DataFrame(st.session_state.analysis_results)
+                    styled_df = df.style.map(highlight_status, subset=['Mức độ'])
+                    table_placeholder.dataframe(styled_df, use_container_width=True, hide_index=True)
                     
                     current_segment += 1
                     seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
@@ -295,9 +306,11 @@ with col_main:
             cap.release()
             st.rerun() 
 
+    # HIỂN THỊ VÀ TÔ MÀU BẢNG SAU KHI QUÉT XONG
     if st.session_state.analysis_results:
         df = pd.DataFrame(st.session_state.analysis_results)
-        table_placeholder.dataframe(df, use_container_width=True, hide_index=True)
+        styled_df = df.style.map(highlight_status, subset=['Mức độ'])
+        table_placeholder.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         df_rut = df[df['Diện tích lún (m²)'] > 0] 
         tong_so_doan = len(df)
