@@ -6,7 +6,6 @@ import folium
 from streamlit_folium import st_folium
 import requests
 import os
-import time
 import math
 
 # --- CẤU HÌNH TRANG ---
@@ -144,7 +143,6 @@ with col_map:
 with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ HIỂN THỊ</h4>", unsafe_allow_html=True)
     
-    # CHIẾN THUẬT MỚI: CHIA ĐÔI KHUNG VIDEO THÀNH 2 CỘT NHỎ
     vid_col1, vid_col2 = st.columns(2)
     
     with vid_col1:
@@ -155,11 +153,9 @@ with col_main:
         st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video Quét OpenCV</p>", unsafe_allow_html=True)
         video_placeholder = st.empty()
 
-    # Nếu đã có video tải lên, nhúng luôn trình duyệt Video HTML5 (Bấm chạy mượt 100%)
     if st.session_state.video_path and os.path.exists(st.session_state.video_path):
         org_vid_placeholder.video(st.session_state.video_path)
     
-    # Hiển thị lại khung hình quét cuối cùng (Nếu có)
     if st.session_state.last_frame is not None:
         video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
         
@@ -177,7 +173,6 @@ with col_main:
         with open(video_path, "wb") as f: 
             f.write(uploaded_file.read())
             
-        # Nạp video gốc ngay khi vừa lưu file xong để xem được ngay
         org_vid_placeholder.video(video_path)
         
         cap = cv2.VideoCapture(video_path)
@@ -187,6 +182,13 @@ with col_main:
         else:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             if fps <= 0: fps = 30.0
+            
+            # --- ĐÃ THÊM: Tính toán tỷ lệ khung hình tự động ---
+            orig_w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            orig_h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            target_w = 480
+            # Tự động điều chỉnh chiều cao để khớp tỷ lệ với video gốc
+            target_h = int(target_w * (orig_h / orig_w)) if orig_w > 0 else 270
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             speed_m_s = 15.0  
@@ -211,7 +213,8 @@ with col_main:
                 current_distance_m = int((frame_count / fps) * speed_m_s)
                 if current_distance_m > limit_distance: break
 
-                frame_disp = cv2.resize(frame, (480, 270))
+                # --- ĐÃ SỬA: Resize theo tỷ lệ tự động đã tính toán ---
+                frame_disp = cv2.resize(frame, (target_w, target_h))
                 height, width = frame_disp.shape[:2]
                 
                 mask = np.zeros((height, width), dtype=np.uint8)
@@ -243,7 +246,6 @@ with col_main:
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                # Bỏ qua khung hình (Frame skip) để chống kẹt mạng web
                 if frame_count % 12 == 0:
                     video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
                     st.session_state.last_frame = frame_disp 
