@@ -6,7 +6,6 @@ import folium
 from streamlit_folium import st_folium
 import requests
 import os
-import time
 import math
 
 # --- CẤU HÌNH TRANG ---
@@ -20,7 +19,7 @@ if 'route_distance' not in st.session_state: st.session_state.route_distance = 0
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = []
 if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
 if 'video_path' not in st.session_state: st.session_state.video_path = None
-if 'last_frame' not in st.session_state: st.session_state.last_frame = None  # Lưu khung hình để không bị xóa khi rerun
+if 'last_frame' not in st.session_state: st.session_state.last_frame = None
 
 # --- HÀM BỔ TRỢ TOÁN HỌC & BẢN ĐỒ ---
 def tinh_khoang_cach(lat1, lon1, lat2, lon2):
@@ -145,16 +144,15 @@ with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ QUÉT OPENCV</h4>", unsafe_allow_html=True)
     video_placeholder = st.empty()
     
-    # NẾU ĐÃ QUÉT XONG: Hiển thị lại khung hình cuối cùng ở đây để video không bị biến mất thành khoảng trống
     if st.session_state.last_frame is not None:
-        video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
+        video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=False)
         
     st.markdown("<h4 style='color: #1e3a8a; margin-top: 15px;'>📊 BẢNG SỐ LIỆU TỔNG HỢP</h4>", unsafe_allow_html=True)
     table_placeholder = st.empty()
     summary_placeholder = st.empty()
 
     if analyze_btn and uploaded_file:
-        st.session_state.last_frame = None # Xóa khung hình cũ khi bắt đầu quét luồng mới
+        st.session_state.last_frame = None 
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
         st.session_state.video_path = video_path
@@ -194,7 +192,7 @@ with col_main:
                 current_distance_m = int((frame_count / fps) * speed_m_s)
                 if current_distance_m > limit_distance: break
 
-                frame_disp = cv2.resize(frame, (640, 360))
+                frame_disp = cv2.resize(frame, (480, 270))
                 height, width = frame_disp.shape[:2]
                 
                 mask = np.zeros((height, width), dtype=np.uint8)
@@ -210,7 +208,7 @@ with col_main:
                 contours, _ = cv2.findContours(cv2.Canny(cv2.GaussianBlur(roi_gray, (7, 7), 0), 100, 200), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
                 for cnt in contours:
-                    if cv2.contourArea(cnt) > 1500:  
+                    if cv2.contourArea(cnt) > 800:  
                         x, y, w, h = cv2.boundingRect(cnt)
                         L = h * 0.05  
                         W = w * 0.02  
@@ -224,13 +222,14 @@ with col_main:
                         seg_len.append(L); seg_wid.append(W); seg_area.append(A); seg_pos.append(pos)
                         cv2.rectangle(frame_disp, (x, y), (x + w, y + h), (0, 165, 255), 2)
 
-                cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                # Đẩy từng khung hình lên giao diện thời gian thực
-                video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
-                st.session_state.last_frame = frame_disp # Ghi nhớ khung hình hiện tại vào bộ nhớ tạm
+                # --- ĐÃ SỬA CHỐNG ĐỨNG HÌNH BẰNG FRAME SKIPPING ---
+                # Chỉ đẩy ảnh lên giao diện sau mỗi 3 khung hình (giúp WebSocket không bị tắc nghẽn)
+                if frame_count % 3 == 0:
+                    video_placeholder.image(frame_disp, channels="BGR", use_container_width=False)
+                    st.session_state.last_frame = frame_disp 
                 
-                time.sleep(0.01)
                 frame_count += 1
 
                 if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
