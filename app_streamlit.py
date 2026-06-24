@@ -18,7 +18,6 @@ if 'route_coords' not in st.session_state: st.session_state.route_coords = []
 if 'route_distance' not in st.session_state: st.session_state.route_distance = 0.0
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = []
 if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
-if 'video_path' not in st.session_state: st.session_state.video_path = None
 if 'last_frame' not in st.session_state: st.session_state.last_frame = None
 
 # --- HÀM BỔ TRỢ TOÁN HỌC & BẢN ĐỒ ---
@@ -67,7 +66,7 @@ def cat_doan_duong_cong(coords, start_m, end_m):
 
 # --- GIAO DIỆN HEADER ---
 st.markdown("<h2 style='text-align: center; color: #b91c1c;'>Hệ Thống Phân Tích Độ Lún Đường Nhựa Qua Video</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #475569;'>ITS - Nhóm 10</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #475569;'>Đồ án môn học ITS - Nhóm 10 | Streamlit Cloud</p>", unsafe_allow_html=True)
 st.divider()
 
 # --- KHU VỰC TẢI FILE VÀ CẤU HÌNH ---
@@ -85,7 +84,7 @@ with st.container():
         start_str = st.text_input("Tọa độ Điểm Đầu (Lat, Lng):", f"{st.session_state.start_gps[0]:.5f}, {st.session_state.start_gps[1]:.5f}")
     
     with col_up3:
-        st.write(f"**Chiều dài thực tế:** {st.session_state.route_distance:.1f} mét")
+        st.write(f"**Chiều dài uốn lượn thực tế:** {st.session_state.route_distance:.1f} mét")
         end_str = st.text_input("Tọa độ Điểm Cuối (Lat, Lng):", f"{st.session_state.end_gps[0]:.5f}, {st.session_state.end_gps[1]:.5f}")
         analyze_btn = st.button("🚀 Bắt Đầu Truyền Luồng & Quét OpenCV", type="primary", use_container_width=True)
 
@@ -155,7 +154,6 @@ with col_main:
         st.session_state.last_frame = None 
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
-        st.session_state.video_path = video_path
         
         uploaded_file.seek(0)
         with open(video_path, "wb") as f: 
@@ -224,9 +222,9 @@ with col_main:
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                # --- ĐÃ SỬA CHỐNG ĐỨNG HÌNH BẰNG FRAME SKIPPING ---
-                # Chỉ đẩy ảnh lên giao diện sau mỗi 3 khung hình (giúp WebSocket không bị tắc nghẽn)
-                if frame_count % 3 == 0:
+                # --- ĐÃ XÓA TIME.SLEEP() VÀ SỬA FRAME SKIP ---
+                # Chỉ xuất ảnh lên Web mỗi 12 frames (Giúp mạng không bị nghẽn, video chạy vèo vèo)
+                if frame_count % 12 == 0:
                     video_placeholder.image(frame_disp, channels="BGR", use_container_width=False)
                     st.session_state.last_frame = frame_disp 
                 
