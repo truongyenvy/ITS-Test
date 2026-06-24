@@ -20,8 +20,7 @@ if 'route_distance' not in st.session_state: st.session_state.route_distance = 0
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = []
 if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
 if 'video_path' not in st.session_state: st.session_state.video_path = None
-# Thêm biến lưu trữ frame cuối để tránh video biến mất khi Rerun
-if 'last_frame' not in st.session_state: st.session_state.last_frame = None 
+if 'last_frame' not in st.session_state: st.session_state.last_frame = None  # Lưu khung hình để không bị xóa khi rerun
 
 # --- HÀM BỔ TRỢ TOÁN HỌC & BẢN ĐỒ ---
 def tinh_khoang_cach(lat1, lon1, lat2, lon2):
@@ -146,15 +145,16 @@ with col_main:
     st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ QUÉT OPENCV</h4>", unsafe_allow_html=True)
     video_placeholder = st.empty()
     
-    # Hiển thị lại frame video cuối cùng sau khi st.rerun() được kích hoạt
-    if st.session_state.last_frame is not None and not analyze_btn:
-        video_placeholder.image(st.session_state.last_frame, channels="RGB", use_container_width=True)
-
+    # NẾU ĐÃ QUÉT XONG: Hiển thị lại khung hình cuối cùng ở đây để video không bị biến mất thành khoảng trống
+    if st.session_state.last_frame is not None:
+        video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
+        
     st.markdown("<h4 style='color: #1e3a8a; margin-top: 15px;'>📊 BẢNG SỐ LIỆU TỔNG HỢP</h4>", unsafe_allow_html=True)
     table_placeholder = st.empty()
     summary_placeholder = st.empty()
 
     if analyze_btn and uploaded_file:
+        st.session_state.last_frame = None # Xóa khung hình cũ khi bắt đầu quét luồng mới
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
         st.session_state.video_path = video_path
@@ -206,9 +206,7 @@ with col_main:
                 ], np.int32)
                 cv2.fillPoly(mask, [road_polygon], 255)
 
-                # Đã tối ưu việc gọi cvtColor lặp lại
-                gray_frame = cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY)
-                roi_gray = cv2.bitwise_and(gray_frame, gray_frame, mask=mask)
+                roi_gray = cv2.bitwise_and(cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), cv2.cvtColor(frame_disp, cv2.COLOR_BGR2GRAY), mask=mask)
                 contours, _ = cv2.findContours(cv2.Canny(cv2.GaussianBlur(roi_gray, (7, 7), 0), 100, 200), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
                 for cnt in contours:
@@ -228,17 +226,13 @@ with col_main:
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 
-                # --- SỬA LẠI ĐOẠN NÀY ĐỂ VIDEO CHẠY ĐƯỢC TRÊN WEB ---
-                # Thay vì cập nhật mọi frame gây nghẽn mạng, ta chỉ cập nhật UI mỗi 3-5 frame
-                if frame_count % 3 == 0: 
-                    frame_rgb = cv2.cvtColor(frame_disp, cv2.COLOR_BGR2RGB)
-                    video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+                # Đẩy từng khung hình lên giao diện thời gian thực
+                video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
+                st.session_state.last_frame = frame_disp # Ghi nhớ khung hình hiện tại vào bộ nhớ tạm
                 
-                # BỎ HẲN time.sleep() ĐI VÌ TRÊN SERVER XỬ LÝ KHÔNG CẦN DELAY
-                # time.sleep(1 / fps) 
-                # ---------------------------------------------------
-                
+                time.sleep(0.01)
                 frame_count += 1
+
                 if frame_count >= frames_per_segment * (current_segment + 1) or frame_count == total_frames:
                     t_len = sum(seg_len)
                     a_wid = sum(seg_wid) / len(seg_wid) if seg_wid else 0
@@ -279,8 +273,6 @@ with col_main:
                     current_segment += 1
                     seg_len, seg_wid, seg_area, seg_pos = [], [], [], []
 
-            # Lưu lại ảnh cuối vào session_state để chuẩn bị cho Rerun
-            st.session_state.last_frame = frame_rgb
             cap.release()
             st.rerun() 
 
