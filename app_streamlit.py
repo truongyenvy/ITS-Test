@@ -6,6 +6,7 @@ import folium
 from streamlit_folium import st_folium
 import requests
 import os
+import time
 import math
 
 # --- CẤU HÌNH TRANG ---
@@ -18,6 +19,7 @@ if 'route_coords' not in st.session_state: st.session_state.route_coords = []
 if 'route_distance' not in st.session_state: st.session_state.route_distance = 0.0
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = []
 if 'map_polylines' not in st.session_state: st.session_state.map_polylines = []
+if 'video_path' not in st.session_state: st.session_state.video_path = None
 if 'last_frame' not in st.session_state: st.session_state.last_frame = None
 
 # --- HÀM BỔ TRỢ TOÁN HỌC & BẢN ĐỒ ---
@@ -140,11 +142,26 @@ with col_map:
 
 # CỘT PHẢI: VIDEO VÀ THỐNG KÊ
 with col_main:
-    st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ QUÉT OPENCV</h4>", unsafe_allow_html=True)
-    video_placeholder = st.empty()
+    st.markdown("<h4 style='color: #1e3a8a;'>🎬 KẾT QUẢ HIỂN THỊ</h4>", unsafe_allow_html=True)
     
+    # CHIẾN THUẬT MỚI: CHIA ĐÔI KHUNG VIDEO THÀNH 2 CỘT NHỎ
+    vid_col1, vid_col2 = st.columns(2)
+    
+    with vid_col1:
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #475569;'>🎥 Video Gốc (Mượt)</p>", unsafe_allow_html=True)
+        org_vid_placeholder = st.empty()
+        
+    with vid_col2:
+        st.markdown("<p style='text-align: center; font-weight: bold; color: #b91c1c;'>⚙️ Video Quét OpenCV</p>", unsafe_allow_html=True)
+        video_placeholder = st.empty()
+
+    # Nếu đã có video tải lên, nhúng luôn trình duyệt Video HTML5 (Bấm chạy mượt 100%)
+    if st.session_state.video_path and os.path.exists(st.session_state.video_path):
+        org_vid_placeholder.video(st.session_state.video_path)
+    
+    # Hiển thị lại khung hình quét cuối cùng (Nếu có)
     if st.session_state.last_frame is not None:
-        video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=False)
+        video_placeholder.image(st.session_state.last_frame, channels="BGR", use_container_width=True)
         
     st.markdown("<h4 style='color: #1e3a8a; margin-top: 15px;'>📊 BẢNG SỐ LIỆU TỔNG HỢP</h4>", unsafe_allow_html=True)
     table_placeholder = st.empty()
@@ -154,10 +171,14 @@ with col_main:
         st.session_state.last_frame = None 
         os.makedirs("uploads", exist_ok=True)
         video_path = os.path.join("uploads", uploaded_file.name)
+        st.session_state.video_path = video_path
         
         uploaded_file.seek(0)
         with open(video_path, "wb") as f: 
             f.write(uploaded_file.read())
+            
+        # Nạp video gốc ngay khi vừa lưu file xong để xem được ngay
+        org_vid_placeholder.video(video_path)
         
         cap = cv2.VideoCapture(video_path)
         
@@ -222,10 +243,9 @@ with col_main:
 
                 cv2.putText(frame_disp, f"QUET: {current_distance_m}m / LIMIT: {int(limit_distance)}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
-                # --- ĐÃ XÓA TIME.SLEEP() VÀ SỬA FRAME SKIP ---
-                # Chỉ xuất ảnh lên Web mỗi 12 frames (Giúp mạng không bị nghẽn, video chạy vèo vèo)
+                # Bỏ qua khung hình (Frame skip) để chống kẹt mạng web
                 if frame_count % 12 == 0:
-                    video_placeholder.image(frame_disp, channels="BGR", use_container_width=False)
+                    video_placeholder.image(frame_disp, channels="BGR", use_container_width=True)
                     st.session_state.last_frame = frame_disp 
                 
                 frame_count += 1
